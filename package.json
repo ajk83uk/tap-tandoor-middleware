@@ -1,0 +1,18 @@
+{
+  "name": "tap-tandoor-voice-middleware",
+  "version": "1.0.0",
+  "description": "Voice assistant middleware for Tap & Tandoor — bridges Vapi.ai and the FavouriteTable API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "dotenv": "^16.3.1",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
