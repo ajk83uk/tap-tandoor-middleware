@@ -22,10 +22,9 @@ async function checkAvailability(req, res) {
         endDate: formatDate(in14),
       });
 
-      const availableDates = (dateResult.ResultInfo || dateResult.DateList || [])
-        .filter(d => d.IsAvailable)
-        .map(d => d.BookingDate)
-        .slice(0, 7); // cap at 7 to keep voice response concise
+      // ResultInfo is { DateList: ["20260417", ...] } — extract the array
+      const dateList = dateResult.ResultInfo?.DateList || dateResult.DateList || [];
+      const availableDates = dateList.slice(0, 7); // cap at 7 for voice
 
       return res.json({
         success: true,
@@ -40,13 +39,14 @@ async function checkAvailability(req, res) {
     // ── Step 2: If date given but no shift, return available shifts ───────────
     if (bookingDate && !shiftCode) {
       const shiftResult = await getShiftList({ siteCode, bookingDate });
-      const shifts = (shiftResult.ResultInfo || shiftResult.ShiftList || []).map(s => ({
+      // ResultInfo is { ShiftList: [{ShiftCode, ShiftName, ...}] }
+      const shiftList = shiftResult.ResultInfo?.ShiftList || shiftResult.ShiftList || [];
+      const shifts = shiftList.map(s => ({
         shiftCode: s.ShiftCode,
         shiftName: s.ShiftName,
-        startTime: s.StartTime,
-        endTime: s.EndTime,
-        isAvailable: s.IsAvailable,
-      })).filter(s => s.isAvailable);
+        startTime: s.ShiftStartTime,
+        endTime: s.ShiftEndTime,
+      }));
 
       return res.json({
         success: true,
@@ -62,7 +62,9 @@ async function checkAvailability(req, res) {
     // ── Step 3: Date + shift + guest count → return timeslots ────────────────
     if (bookingDate && shiftCode && guestCount) {
       const slotResult = await getTimeslotList({ siteCode, shiftCode, bookingDate, guestCount });
-      const slots = (slotResult.ResultInfo || slotResult.TimeSlotList || []).map(s => ({
+      // ResultInfo is { TimeSlotList: [{BookingTime, Duration, AvailableBookings, ...}] }
+      const slotList = slotResult.ResultInfo?.TimeSlotList || slotResult.TimeSlotList || [];
+      const slots = slotList.map(s => ({
         time: s.BookingTime,
         duration: s.Duration,
         available: s.AvailableBookings > 0,
