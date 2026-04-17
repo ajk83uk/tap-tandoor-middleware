@@ -25,13 +25,14 @@ async function checkAvailability(req, res) {
       // ResultInfo is { DateList: ["20260417", ...] } — extract the array
       const dateList = dateResult.ResultInfo?.DateList || dateResult.DateList || [];
       const availableDates = dateList.slice(0, 7); // cap at 7 for voice
+      const friendlyDates = availableDates.map(friendlyDate);
 
       return res.json({
         success: true,
         type: 'dates',
         availableDates,
         message: availableDates.length > 0
-          ? `We have availability on: ${availableDates.join(', ')}.`
+          ? `We have availability on: ${friendlyDates.join(', ')}.`
           : 'Unfortunately we have no availability in the next 14 days.',
       });
     }
@@ -54,8 +55,8 @@ async function checkAvailability(req, res) {
         bookingDate,
         shifts,
         message: shifts.length > 0
-          ? `On ${bookingDate} we have: ${shifts.map(s => s.shiftName).join(' and ')}.`
-          : `Unfortunately we have no availability on ${bookingDate}.`,
+          ? `On ${friendlyDate(bookingDate)} we have: ${shifts.map(s => s.shiftName).join(' and ')}.`
+          : `Unfortunately we have no availability on ${friendlyDate(bookingDate)}.`,
       });
     }
 
@@ -65,7 +66,8 @@ async function checkAvailability(req, res) {
       // ResultInfo is { TimeSlotList: [{BookingTime, Duration, AvailableBookings, ...}] }
       const slotList = slotResult.ResultInfo?.TimeSlotList || slotResult.TimeSlotList || [];
       const slots = slotList.map(s => ({
-        time: s.BookingTime,
+        time: s.BookingTime,                    // raw seconds (for API calls)
+        timeDisplay: friendlyTime(s.BookingTime), // "6:00 PM" (for voice)
         duration: s.Duration,
         available: s.AvailableBookings > 0,
       })).filter(s => s.available);
@@ -78,8 +80,8 @@ async function checkAvailability(req, res) {
         guestCount,
         slots,
         message: slots.length > 0
-          ? `Available times for ${guestCount} guests on ${bookingDate}: ${slots.map(s => s.time).join(', ')}.`
-          : `Sorry, no tables available for ${guestCount} guests on ${bookingDate} for that session.`,
+          ? `Available times for ${guestCount} guests on ${friendlyDate(bookingDate)}: ${slots.map(s => s.timeDisplay).join(', ')}.`
+          : `Sorry, no tables available for ${guestCount} guests on ${friendlyDate(bookingDate)} for that session.`,
       });
     }
 
@@ -103,8 +105,24 @@ function formatDate(date) {
 // Accepts: yyyyMMdd, yyyy-MM-dd, yyyy/MM/dd
 function normaliseDateString(str) {
   if (!str) return str;
-  const clean = str.replace(/[-\/]/g, '');
-  return clean; // strips dashes/slashes → yyyyMMdd
+  return str.replace(/[-\/]/g, '');
+}
+
+// Convert yyyyMMdd → "Friday 17 April 2026" (voice-friendly)
+function friendlyDate(str) {
+  if (!str || str.length !== 8) return str;
+  const y = str.slice(0, 4), mo = str.slice(4, 6), d = str.slice(6, 8);
+  const dt = new Date(`${y}-${mo}-${d}`);
+  return dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Convert seconds-since-midnight → "6:00 PM" (voice-friendly)
+function friendlyTime(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return m === 0 ? `${h12} ${period}` : `${h12}:${String(m).padStart(2, '0')} ${period}`;
 }
 
 module.exports = { checkAvailability };
