@@ -8,7 +8,6 @@ async function createBooking(req, res) {
   const {
     siteCode,
     shiftCode,
-    bookingDate,
     bookingTime,
     guestCount,
     firstName,
@@ -20,6 +19,9 @@ async function createBooking(req, res) {
     specialRequest,    // optional
     locationCode,      // optional
   } = req.body;
+
+  // Normalise date to yyyyMMdd (FT requirement)
+  const bookingDate = (req.body.bookingDate || '').replace(/[-\/]/g, '');
 
   // Basic validation
   const missing = ['siteCode', 'shiftCode', 'bookingDate', 'bookingTime', 'guestCount', 'firstName', 'lastName', 'tel']
