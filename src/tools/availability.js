@@ -6,7 +6,8 @@
 const { getDateList, getShiftList, getTimeslotList } = require('../ft-client');
 
 async function checkAvailability(req, res) {
-  const { siteCode, bookingDate, shiftCode, guestCount } = req.body;
+  const { siteCode, shiftCode, guestCount } = req.body;
+  const bookingDate = normaliseDateString(req.body.bookingDate);
 
   try {
     // ── Step 1: If no date given, return next 14 days of available dates ───────
@@ -88,8 +89,20 @@ async function checkAvailability(req, res) {
   }
 }
 
+// FavouriteTable expects dates in yyyyMMdd format (e.g. 20260417)
 function formatDate(date) {
-  return date.toISOString().split('T')[0]; // YYYY-MM-DD
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}${m}${d}`;
+}
+
+// Normalise any incoming date string to yyyyMMdd
+// Accepts: yyyyMMdd, yyyy-MM-dd, yyyy/MM/dd
+function normaliseDateString(str) {
+  if (!str) return str;
+  const clean = str.replace(/[-\/]/g, '');
+  return clean; // strips dashes/slashes → yyyyMMdd
 }
 
 module.exports = { checkAvailability };
