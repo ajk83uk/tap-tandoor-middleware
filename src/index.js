@@ -12,15 +12,13 @@ const app = express();
 app.use(express.json());
 
 // ─── Vapi Response Wrapper ────────────────────────────────────────────────────
-// Vapi requires tool responses to have a top-level "result" string field.
-// This middleware intercepts res.json() on /tools/* routes and wraps the
-// response so Vapi can read it correctly.
+// Vapi passes the "result" field from the tool response back to the LLM.
+// Keep it as a clean plain-text string — no nested JSON, no extra fields.
 app.use('/tools', (req, res, next) => {
   const originalJson = res.json.bind(res);
   res.json = (data) => {
-    // Wrap in { result: "..." } — use the message field if available
-    const resultText = data?.message || JSON.stringify(data);
-    return originalJson({ result: resultText, ...data });
+    const resultText = data?.message || (data?.error ? `Error: ${data.error}` : 'No data returned.');
+    return originalJson({ result: resultText });
   };
   next();
 });
