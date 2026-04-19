@@ -60,9 +60,10 @@ async function checkAvailability(req, res) {
       });
     }
 
-    // ── Step 3: Date + shift + guest count → return timeslots ────────────────
-    if (bookingDate && shiftCode && guestCount) {
-      const slotResult = await getTimeslotList({ siteCode, shiftCode, bookingDate, guestCount });
+    // ── Step 3: Date + shift → return timeslots (guestCount optional, defaults to 2)
+    if (bookingDate && shiftCode) {
+      const guests = guestCount || 2;
+      const slotResult = await getTimeslotList({ siteCode, shiftCode, bookingDate, guestCount: guests });
       // ResultInfo is { TimeSlotList: [{BookingTime, Duration, AvailableBookings, ...}] }
       const slotList = slotResult.ResultInfo?.TimeSlotList || slotResult.TimeSlotList || [];
       const allSlots = slotList.map(s => ({
@@ -83,7 +84,7 @@ async function checkAvailability(req, res) {
         slots,
         message: slots.length > 0
           ? `Available times on ${friendlyDate(bookingDate)}: ${slots.map(s => s.display).join(', ')}${allSlots.length > 4 ? ' and more.' : '.'}`
-          : `Sorry, no tables available for ${guestCount} guests on ${friendlyDate(bookingDate)}.`,
+          : `Sorry, no tables available for ${guests} guests on ${friendlyDate(bookingDate)}.`,
       });
     }
 
