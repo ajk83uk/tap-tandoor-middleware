@@ -73,10 +73,12 @@ async function createBooking(req, res) {
 
 // ─── Lookup Booking ───────────────────────────────────────────────────────────
 async function lookupBooking(req, res) {
-  const { email, bookingRefNo, bookingGuid } = req.body;
+  const { email, bookingRefNo, bookingGuid, tel } = req.body;
 
+  // Phone-only lookup is not supported by FT API — return gracefully so the
+  // AI doesn't loop. A real lookup requires email or reference number.
   if (!email && !bookingRefNo && !bookingGuid) {
-    return res.status(400).json({ success: false, error: 'Provide email, bookingRefNo, or bookingGuid.' });
+    return res.json({ success: false, message: 'No booking found with those details.' });
   }
 
   try {
