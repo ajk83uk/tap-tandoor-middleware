@@ -48,6 +48,7 @@ async function createBooking(req, res) {
       IsNoAllergen: !allergenValues || allergenValues.length === 0,
       // Sales channel — voice booking channel code
       SaleChannelCode: SALE_CHANNEL_CODE,
+      SaleSourceCode: 1,
     });
 
     const bk    = result?.ResultInfo || result?.Booking || result;
