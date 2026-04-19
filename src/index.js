@@ -108,6 +108,11 @@ app.post('/site', vapiAuth, (req, res) => {
   return res.json(site);
 });
 
+// ─── Debug echo — returns raw body so we can see what Vapi sends ─────────────
+app.post('/tools/debug_echo', (req, res) => {
+  res.json({ message: 'RAW:' + JSON.stringify(req.body) });
+});
+
 // ─── Tool Routes ──────────────────────────────────────────────────────────────
 app.post('/tools/check_availability', vapiAuth, checkAvailability);
 app.post('/tools/get_occasions',       vapiAuth, getOccasions);
