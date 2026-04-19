@@ -9,6 +9,14 @@ const { getOccasions, getAllergens, checkGuestBlocked } = require('./tools/looku
 const { getOffers } = require('./tools/offers');
 
 const app = express();
+
+// Capture raw body text before express.json() parses it
+app.use((req, res, next) => {
+  let raw = '';
+  req.on('data', chunk => { raw += chunk.toString(); });
+  req.on('end', () => { req.rawBody = raw; next(); });
+});
+
 app.use(express.json());
 
 // ─── Vapi Tool Request Normaliser ─────────────────────────────────────────────
@@ -108,9 +116,19 @@ app.post('/site', vapiAuth, (req, res) => {
   return res.json(site);
 });
 
-// ─── Debug echo — returns raw body so we can see what Vapi sends ─────────────
+// ─── Debug echo — returns raw body and headers so we can see what Vapi sends ──
 app.post('/tools/debug_echo', (req, res) => {
-  res.json({ message: 'RAW:' + JSON.stringify(req.body) });
+  const info = {
+    headers: {
+      'content-type': req.headers['content-type'],
+      'x-vapi-secret': req.headers['x-vapi-secret'] ? 'present' : 'MISSING',
+      'content-length': req.headers['content-length'],
+    },
+    rawBody: req.rawBody || '(empty)',
+    parsedBody: req.body,
+  };
+  console.log('[debug_echo]', JSON.stringify(info));
+  res.json({ message: 'DEBUG:' + JSON.stringify(info) });
 });
 
 // ─── Tool Routes ──────────────────────────────────────────────────────────────
