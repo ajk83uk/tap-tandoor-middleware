@@ -13,8 +13,13 @@ const BASE_URL = process.env.FT_BASE_URL || 'https://demo.favouritetable.com/Web
 async function ftRequest(endpoint, method = 'GET', body = null) {
   const url = `${BASE_URL}${endpoint}`;
 
+  // Abort after 8 seconds — Vapi tools time out at ~15s so this gives us headroom
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   const options = {
     method,
+    signal: controller.signal,
     headers: {
       'Authorization': `Bearer ${process.env.FT_AUTH_TOKEN}`,
       'ApiKey': process.env.FT_API_KEY,
@@ -27,7 +32,17 @@ async function ftRequest(endpoint, method = 'GET', body = null) {
     options.body = JSON.stringify(body);
   }
 
-  const response = await fetch(url, options);
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') {
+      throw new FTApiError(`FT API timeout after 8s on ${method} ${endpoint}`, 504, {});
+    }
+    throw err;
+  }
+  clearTimeout(timeout);
 
   // FavouriteTable returns 200 even for some errors — always parse the body
   const data = await response.json().catch(() => ({}));
