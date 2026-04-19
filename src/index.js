@@ -10,92 +10,83 @@ const { getOffers } = require('./tools/offers');
 
 const app = express();
 
-// Capture raw body text before express.json() parses it
-app.use((req, res, next) => {
-  let raw = '';
-  req.on('data', chunk => { raw += chunk.toString(); });
-  req.on('end', () => { req.rawBody = raw; next(); });
-});
-
-app.use(express.json());
+// Use verify callback to capture raw body WITHOUT double-consuming the stream
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf.toString();
+  }
+}));
 
 // ─── Vapi Tool Request Normaliser ─────────────────────────────────────────────
-// Vapi sends tool calls in a nested envelope. We extract arguments into req.body
-// and store the toolCallId so the response wrapper can return the correct format.
-//
-// Vapi format (what we receive):
-//   { message: { type: "tool-calls", toolCallList: [{ id, name, arguments: {...} }] } }
-// OR variations:
-//   toolWithToolCallList: [{ toolCall: { id, function: { name, arguments } } }]
-//
-// Expected response format:
-//   { results: [{ toolCallId: "xxx", result: "string" }] }
+// Vapi sends tool calls in a nested envelope:
+//   { message: { type: "tool-calls", toolCallList: [{ id, name, parameters: {...} }] } }
+// We extract parameters into req.body (flat) and store toolCallId for the response.
+// Response must be: { results: [{ toolCallId: "xxx", result: "string" }] }
 app.use('/tools', (req, res, next) => {
-  // Always log the raw body first so we can diagnose format issues
-  console.log(`[vapi-raw] ${req.path} | ${JSON.stringify(req.body).slice(0, 600)}`);
+  // Log raw body so we can diagnose any remaining issues
+  console.log(`[vapi-raw] ${req.path} ct=${req.headers['content-type']} len=${req.headers['content-length']} body=${(req.rawBody || '').slice(0, 500)}`);
 
   const msg = req.body?.message;
 
   if (msg?.type === 'tool-calls') {
-    // ── Try every known Vapi property name for the tool call list ──────────
     let toolCall = null;
 
-    // Format A: toolCallList (documented format)
+    // Format A: toolCallList (documented format — params in .parameters)
     if (msg.toolCallList?.length) {
       toolCall = msg.toolCallList[0];
     }
-    // Format B: toolWithToolCallList (alternative documented format)
+    // Format B: toolWithToolCallList
     else if (msg.toolWithToolCallList?.length) {
       const entry = msg.toolWithToolCallList[0];
       toolCall = entry.toolCall || entry;
     }
-    // Format C: direct toolCalls array (OpenAI-style)
+    // Format C: OpenAI-style toolCalls with function.arguments
     else if (msg.toolCalls?.length) {
       const tc = msg.toolCalls[0];
-      // OpenAI style has function.name and function.arguments
-      if (tc.function) {
-        toolCall = {
-          id: tc.id,
-          name: tc.function.name,
-          arguments: tc.function.arguments,
-        };
-      } else {
-        toolCall = tc;
-      }
+      toolCall = tc.function
+        ? { id: tc.id, name: tc.function.name, parameters: tc.function.arguments }
+        : tc;
     }
 
     if (toolCall) {
       req.vapiToolCallId = toolCall.id;
-      // arguments can be an object or a JSON string
-      const rawArgs = toolCall.arguments ?? toolCall.args ?? {};
+      // Vapi docs say "parameters", but also handle "arguments" for safety
+      const rawArgs = toolCall.parameters ?? toolCall.arguments ?? toolCall.args ?? {};
       req.body = (typeof rawArgs === 'string') ? JSON.parse(rawArgs) : rawArgs;
       console.log(`[vapi-tool] ${toolCall.name || req.path} id=${toolCall.id} args=${JSON.stringify(req.body)}`);
     } else {
-      console.warn(`[vapi-warn] tool-calls message but no toolCall found. msg keys: ${Object.keys(msg).join(', ')}`);
+      console.warn(`[vapi-warn] tool-calls message but no toolCall. Keys: ${Object.keys(msg).join(', ')}`);
     }
+  } else {
+    // Not a Vapi nested call — req.body is already flat (direct/test call)
+    if (req.rawBody) console.log(`[vapi-direct] ${req.path} body=${req.rawBody.slice(0, 200)}`);
   }
-  // else: direct/test call — req.body already flat, no vapiToolCallId set
 
   // ── Response wrapper ──────────────────────────────────────────────────────
   const originalJson = res.json.bind(res);
   res.json = (data) => {
     const resultText = data?.message || (data?.error ? `Error: ${data.error}` : 'No data returned.');
     console.log(`[vapi-resp] ${req.path} → ${resultText.slice(0, 200)}`);
-
-    res.status(200); // Always HTTP 200 — Vapi ignores non-200 tool responses
-
+    res.status(200);
     if (req.vapiToolCallId) {
-      // Vapi server-tool format: { results: [{ toolCallId, result }] }
-      return originalJson({
-        results: [{ toolCallId: req.vapiToolCallId, result: resultText }]
-      });
-    } else {
-      // Direct / curl test format
-      return originalJson({ result: resultText });
+      return originalJson({ results: [{ toolCallId: req.vapiToolCallId, result: resultText }] });
     }
+    return originalJson({ result: resultText });
   };
 
   next();
+});
+
+// ─── Debug echo ───────────────────────────────────────────────────────────────
+app.post('/tools/debug_echo', (req, res) => {
+  const info = {
+    contentType: req.headers['content-type'],
+    rawBody: req.rawBody || '(empty)',
+    parsedBody: req.body,
+    vapiToolCallId: req.vapiToolCallId || null,
+  };
+  console.log('[debug_echo]', JSON.stringify(info));
+  res.json({ message: 'DEBUG:' + JSON.stringify(info) });
 });
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
@@ -105,30 +96,13 @@ app.get('/health', (req, res) => res.json({ status: 'ok', service: 'tap-tandoor-
 app.post('/site', vapiAuth, (req, res) => {
   const toNumber = req.body?.call?.phoneNumber?.number || req.body?.toNumber;
   if (!toNumber) return res.status(400).json({ error: 'toNumber is required' });
-
   const site = getSiteByPhoneNumber(toNumber);
   if (!site) {
     console.warn(`[site] Unknown inbound number: ${toNumber}`);
     return res.status(404).json({ error: 'Site not found for this number' });
   }
-
   console.log(`[site] Call for ${site.name} (siteCode: ${site.siteCode})`);
   return res.json(site);
-});
-
-// ─── Debug echo — returns raw body and headers so we can see what Vapi sends ──
-app.post('/tools/debug_echo', (req, res) => {
-  const info = {
-    headers: {
-      'content-type': req.headers['content-type'],
-      'x-vapi-secret': req.headers['x-vapi-secret'] ? 'present' : 'MISSING',
-      'content-length': req.headers['content-length'],
-    },
-    rawBody: req.rawBody || '(empty)',
-    parsedBody: req.body,
-  };
-  console.log('[debug_echo]', JSON.stringify(info));
-  res.json({ message: 'DEBUG:' + JSON.stringify(info) });
 });
 
 // ─── Tool Routes ──────────────────────────────────────────────────────────────
