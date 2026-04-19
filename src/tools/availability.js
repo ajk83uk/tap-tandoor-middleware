@@ -65,12 +65,14 @@ async function checkAvailability(req, res) {
       const slotResult = await getTimeslotList({ siteCode, shiftCode, bookingDate, guestCount });
       // ResultInfo is { TimeSlotList: [{BookingTime, Duration, AvailableBookings, ...}] }
       const slotList = slotResult.ResultInfo?.TimeSlotList || slotResult.TimeSlotList || [];
-      const slots = slotList.map(s => ({
-        time: s.BookingTime,                    // raw seconds (for API calls)
-        timeDisplay: friendlyTime(s.BookingTime), // "6:00 PM" (for voice)
-        duration: s.Duration,
+      const allSlots = slotList.map(s => ({
+        time: s.BookingTime,                      // raw seconds (for create_booking)
+        display: s.DisplayBookingTime || friendlyTime(s.BookingTime), // "19:00" (for voice)
         available: s.AvailableBookings > 0,
       })).filter(s => s.available);
+
+      // Cap at 4 slots to keep the AI response short and snappy
+      const slots = allSlots.slice(0, 4);
 
       return res.json({
         success: true,
@@ -80,8 +82,8 @@ async function checkAvailability(req, res) {
         guestCount,
         slots,
         message: slots.length > 0
-          ? `Available times for ${guestCount} guests on ${friendlyDate(bookingDate)}: ${slots.map(s => s.timeDisplay).join(', ')}.`
-          : `Sorry, no tables available for ${guestCount} guests on ${friendlyDate(bookingDate)} for that session.`,
+          ? `Available times on ${friendlyDate(bookingDate)}: ${slots.map(s => s.display).join(', ')}${allSlots.length > 4 ? ' and more.' : '.'}`
+          : `Sorry, no tables available for ${guestCount} guests on ${friendlyDate(bookingDate)}.`,
       });
     }
 
