@@ -11,6 +11,20 @@ const { getOffers } = require('./tools/offers');
 const app = express();
 app.use(express.json());
 
+// ─── Vapi Response Wrapper ────────────────────────────────────────────────────
+// Vapi requires tool responses to have a top-level "result" string field.
+// This middleware intercepts res.json() on /tools/* routes and wraps the
+// response so Vapi can read it correctly.
+app.use('/tools', (req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = (data) => {
+    // Wrap in { result: "..." } — use the message field if available
+    const resultText = data?.message || JSON.stringify(data);
+    return originalJson({ result: resultText, ...data });
+  };
+  next();
+});
+
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'tap-tandoor-voice-middleware' }));
 
