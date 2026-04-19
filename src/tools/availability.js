@@ -6,7 +6,7 @@
 const { getDateList, getShiftList, getTimeslotList } = require('../ft-client');
 
 async function checkAvailability(req, res) {
-  const { siteCode, shiftCode, guestCount } = req.body;
+  const { siteCode, shiftCode, guestCount, preferredTime } = req.body;
   const bookingDate = normaliseDateString(req.body.bookingDate);
 
   try {
@@ -72,8 +72,18 @@ async function checkAvailability(req, res) {
         available: s.AvailableBookings > 0,
       })).filter(s => s.available);
 
-      // Cap at 4 slots to keep the AI response short and snappy
-      const slots = allSlots.slice(0, 4);
+      // Return 4 slots closest to the preferredTime (seconds since midnight).
+      // If no preferredTime given, return the first 4.
+      let slots;
+      if (preferredTime && allSlots.length > 0) {
+        const sorted = [...allSlots].sort((a, b) =>
+          Math.abs(a.time - preferredTime) - Math.abs(b.time - preferredTime)
+        );
+        // Take the 4 nearest, then re-sort chronologically
+        slots = sorted.slice(0, 4).sort((a, b) => a.time - b.time);
+      } else {
+        slots = allSlots.slice(0, 4);
+      }
 
       return res.json({
         success: true,
