@@ -15,9 +15,17 @@ app.use(express.json());
 // Vapi passes the "result" field from the tool response back to the LLM.
 // Keep it as a clean plain-text string — no nested JSON, no extra fields.
 app.use('/tools', (req, res, next) => {
+  // Log every incoming tool request so we can see what Vapi sends
+  console.log(`[tool-request] ${req.method} ${req.path}`);
+  console.log(`[tool-request] headers: x-vapi-secret=${req.headers['x-vapi-secret'] ? 'present' : 'MISSING'} content-type=${req.headers['content-type']}`);
+  console.log(`[tool-request] body: ${JSON.stringify(req.body)}`);
+
   const originalJson = res.json.bind(res);
   res.json = (data) => {
     const resultText = data?.message || (data?.error ? `Error: ${data.error}` : 'No data returned.');
+    console.log(`[tool-response] ${req.path} → ${resultText.slice(0, 120)}`);
+    // Always return HTTP 200 so Vapi reads the result field
+    res.status(200);
     return originalJson({ result: resultText });
   };
   next();
