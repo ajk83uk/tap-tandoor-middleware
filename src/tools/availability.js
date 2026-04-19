@@ -93,7 +93,7 @@ async function checkAvailability(req, res) {
         guestCount,
         slots,
         message: slots.length > 0
-          ? `Available times on ${friendlyDate(bookingDate)}: ${slots.map(s => s.display).join(', ')}${allSlots.length > 4 ? ' and more.' : '.'}`
+          ? `Available times on ${friendlyDate(bookingDate)}: ${slots.map(s => `${s.display} (bookingTime=${s.time})`).join(', ')}. Use the bookingTime integer when creating the booking.`
           : `Sorry, no tables available for ${guests} guests on ${friendlyDate(bookingDate)}.`,
       });
     }
