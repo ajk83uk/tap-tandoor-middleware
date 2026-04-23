@@ -50,8 +50,13 @@ app.use('/tools', (req, res, next) => {
 
     if (toolCall) {
       req.vapiToolCallId = toolCall.id;
-      // Vapi docs say "parameters", but also handle "arguments" for safety
-      const rawArgs = toolCall.parameters ?? toolCall.arguments ?? toolCall.args ?? {};
+      // Actual Vapi format: toolCall.function.arguments (object or JSON string)
+      // Fallbacks for alternative formats seen in the wild
+      const rawArgs = toolCall.function?.arguments
+        ?? toolCall.parameters
+        ?? toolCall.arguments
+        ?? toolCall.args
+        ?? {};
       req.body = (typeof rawArgs === 'string') ? JSON.parse(rawArgs) : rawArgs;
       console.log(`[vapi-tool] ${toolCall.name || req.path} id=${toolCall.id} args=${JSON.stringify(req.body)}`);
     } else {
